@@ -4,13 +4,29 @@
     <script src="lib/jquery-1.7.1.min.js"></script>
     <script src="lib/ejs_production.js"></script>
     <script type="text/javascript">
+      var EventStore = function(){
+        var self = this;
+        var events = [];
+        
+        self.store = function(event){
+          events.push(event);
+        };
+      };
+    
       var Inventory = function(){
         var self = this;
+        var event_subscribers = [];
+        
+        self.publish_events_to = function(subscriber_name, callback){
+          event_subscribers.push({name:subscriber_name, callback:callback});
+        };
         
         self.add_inventory_item = function(item_name, school_name){
-          self.inventory_item_added({
-            item_name: item_name, 
-            school_name: school_name
+          event_subscribers.map(function(subscriber){
+            subscriber.callback({
+              item_name: item_name, 
+              school_name: school_name
+            });
           });
         };
       };
@@ -28,10 +44,13 @@
             inventory.add_inventory_item(item_name, school_name);
           });
           
-          inventory.inventory_item_added = function(inventory_item){
+          inventory.publish_events_to("view", function(inventory_item){
             var added_inventory_item_view = new EJS({url: "templates/added_inventory_item.ejs"}).render(inventory_item);
             $("#added_inventory_items").prepend(added_inventory_item_view);
-          };
+          });
+          
+          var event_store = new EventStore();
+          inventory.publish_events_to("event store", event_store.store);
           
           $("#return_home").click(function(){
             self.show_home();
