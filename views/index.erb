@@ -1,0 +1,74 @@
+<html>
+  <head>
+    <title>Hee Haw</title>
+    <script src="lib/jquery-1.7.1.min.js"></script>
+    <script src="lib/ejs_production.js"></script>
+    <script type="text/javascript">
+      var Inventory = function(){
+        var self = this;
+        
+        self.add_inventory_item = function(item_name, school_name){
+          self.inventory_item_added({
+            item_name: item_name, 
+            school_name: school_name
+          });
+        };
+      };
+    
+      var HeeHawApplication = function(){
+        var self = this;
+        var inventory = new Inventory();
+        
+        self.show_inventory_items = function(){
+          new EJS({url: "templates/add_inventory_items.ejs"}).update("application", {});
+          
+          $("#add_item_button").click(function(){
+            var item_name = $("#item_name").val();
+            var school_name = $('input:radio[name=school]:checked').val();
+            inventory.add_inventory_item(item_name, school_name);
+          });
+          
+          inventory.inventory_item_added = function(inventory_item){
+            var added_inventory_item_view = new EJS({url: "templates/added_inventory_item.ejs"}).render(inventory_item);
+            $("#added_inventory_items").prepend(added_inventory_item_view);
+          };
+          
+          $("#return_home").click(function(){
+            self.show_home();
+          });
+        };
+        
+        self.show_take_inventory_form = function(){
+          new EJS({url: "templates/inventory_form.ejs"}).update("application", {});
+          
+          $("#return_home").click(function(){
+            self.show_home();
+          });
+        };
+        
+        self.show_home = function(){
+          new EJS({url: "templates/home.ejs"}).update("application", {});
+          
+          $("#add_inventory_items_button").click(function(){
+            self.show_inventory_items();
+          });
+          
+          $("#take_inventory_button").click(function(){
+            self.show_take_inventory_form();
+          });
+        };
+        
+        self.start_up = function(){
+          self.show_home();
+        };
+      };
+    
+      $(document).ready(function(){
+        new HeeHawApplication().start_up();
+      });
+    </script>
+  </head>
+  <body>
+    <div id="application"></div>
+  </body>
+</html>
