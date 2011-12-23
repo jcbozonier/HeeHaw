@@ -8,8 +8,18 @@
         var self = this;
         var events = [];
         
+        self.on_hydration = function(event){
+        
+        };
+        
         self.store = function(event){
           events.push(event);
+        };
+        
+        self.hydrate = function(){
+          events.map(function(event){
+            self.on_hydration(event);
+          });
         };
       };
     
@@ -19,6 +29,14 @@
         
         self.publish_events_to = function(subscriber_name, callback){
           event_subscribers.push({name:subscriber_name, callback:callback});
+        };
+        
+        self.remove_all_subscribers = function(){
+          event_subscribers = [];
+        };
+        
+        self.hydrate = function(event){
+          self.add_inventory_item(event.item_name, event.school_name);
         };
         
         self.add_inventory_item = function(item_name, school_name){
@@ -34,8 +52,17 @@
       var HeeHawApplication = function(){
         var self = this;
         var inventory = new Inventory();
+        var event_store = new EventStore();
+        event_store.on_hydration = inventory.hydrate;
         
         self.show_inventory_items = function(){
+          inventory.remove_all_subscribers();
+          
+          inventory.publish_events_to("view", function(inventory_item){
+            var added_inventory_item_view = new EJS({url: "templates/added_inventory_item.ejs"}).render(inventory_item);
+            $("#added_inventory_items").prepend(added_inventory_item_view);
+          });
+        
           new EJS({url: "templates/add_inventory_items.ejs"}).update("application", {});
           
           $("#add_item_button").click(function(){
@@ -44,17 +71,13 @@
             inventory.add_inventory_item(item_name, school_name);
           });
           
-          inventory.publish_events_to("view", function(inventory_item){
-            var added_inventory_item_view = new EJS({url: "templates/added_inventory_item.ejs"}).render(inventory_item);
-            $("#added_inventory_items").prepend(added_inventory_item_view);
-          });
-          
-          var event_store = new EventStore();
-          inventory.publish_events_to("event store", event_store.store);
-          
           $("#return_home").click(function(){
             self.show_home();
           });
+          
+          event_store.hydrate();
+          
+          inventory.publish_events_to("event store", event_store.store);
         };
         
         self.show_take_inventory_form = function(){
