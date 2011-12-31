@@ -4,107 +4,175 @@
     <script src="lib/jquery-1.7.1.min.js"></script>
     <script src="lib/ejs_production.js"></script>
     <script type="text/javascript">
+      function generate_guid() {
+        var S4 = function() {
+           return (((1+Math.random())*0x10000)|0).toString(16).substring(1);
+        };
+        var separator = "_";
+        return (S4()+S4()+separator+S4()+separator+S4()+separator+S4()+separator+S4()+S4()+S4());
+      }
+
       var EventStore = function(){
         var self = this;
         var events = [];
-        
-        self.on_hydration = function(event){
-        
-        };
-        
+        var ignore_events = true;
+
+        self.on_hydration = function(event){};
+
         self.store = function(event){
-          events.push(event);
+          if(!ignore_events){
+            events.push(event);
+          }
         };
-        
+
         self.hydrate = function(){
+          ignore_events = true;
           events.map(function(event){
             self.on_hydration(event);
           });
+          ignore_events = false;
         };
       };
-    
+
       var Inventory = function(){
         var self = this;
         var event_subscribers = [];
-        
-        self.publish_events_to = function(subscriber_name, callback){
-          event_subscribers.push({name:subscriber_name, callback:callback});
+        self.event_store = null;
+
+        self.publish_events_to = function(subscriber_name, callback, event_name){
+          event_subscribers.push({name:subscriber_name, callback:callback, event_name:event_name});
         };
-        
+
         self.remove_all_subscribers = function(){
           event_subscribers = [];
         };
-        
+
         self.hydrate = function(event){
-          self.add_inventory_item(event.item_name, event.school_name);
-        };
-        
-        self.add_inventory_item = function(item_name, school_name){
           event_subscribers.map(function(subscriber){
-            subscriber.callback({
-              item_name: item_name, 
-              school_name: school_name
-            });
+            if(event.type === subscriber.event_name){
+              subscriber.callback(event);
+            }
+          });
+        };
+
+        self.quantity_changed_for_crossroads = function(item_id, new_quantity){
+          notify({
+            type: "crossroads quantity changed",
+            item_id: item_id,
+            new_quantity: new_quantity
+          });
+        };
+
+        self.quantity_changed_for_pathways = function(item_id, new_quantity){
+          notify({
+            type: "pathways quantity changed",
+            item_id: item_id,
+            new_quantity: new_quantity
+          });
+        };
+
+        self.add_inventory_item = function(item_name){
+          notify({
+            type: "inventory item added",
+            item_id: generate_guid(),
+            item_name: item_name
+          });
+        };
+
+        var notify = function(event){
+          if(self.event_store == null){
+            console.log("event store hasn't been set yet!");
+          }
+          self.event_store.store(event);
+          event_subscribers.map(function(subscriber){
+            if(event.type === subscriber.event_name){
+              subscriber.callback(event);
+            }
           });
         };
       };
-    
+
       var HeeHawApplication = function(){
         var self = this;
         var inventory = new Inventory();
         var event_store = new EventStore();
         event_store.on_hydration = inventory.hydrate;
-        
+        inventory.event_store = event_store;
+
         self.show_inventory_items = function(){
           inventory.remove_all_subscribers();
-          
+
           inventory.publish_events_to("view", function(inventory_item){
-            var added_inventory_item_view = new EJS({url: "templates/added_inventory_item.ejs"}).render(inventory_item);
-            $("#added_inventory_items").prepend(added_inventory_item_view);
-          });
-        
+            if(inventory_item.type === "inventory item added"){
+              var added_inventory_item_view = new EJS({url: "templates/added_inventory_item.ejs"}).render(inventory_item);
+              $("#added_inventory_items").prepend(added_inventory_item_view);
+            }
+          }, "inventory item added");
+
           new EJS({url: "templates/add_inventory_items.ejs"}).update("application", {});
-          
+
           $("#add_item_button").click(function(){
             var item_name = $("#item_name").val();
-            var school_name = $('input:radio[name=school]:checked').val();
-            inventory.add_inventory_item(item_name, school_name);
+            inventory.add_inventory_item(item_name);
           });
-          
+
           $("#return_home").click(function(){
             self.show_home();
           });
-          
+
           event_store.hydrate();
-          
-          inventory.publish_events_to("event store", event_store.store);
         };
-        
+
         self.show_take_inventory_form = function(){
           new EJS({url: "templates/inventory_form.ejs"}).update("application", {});
-          
+
+          inventory.remove_all_subscribers();
+
+          inventory.publish_events_to("view", function(inventory_item){
+            var element_id = "pathways_qty_" + inventory_item.item_id;
+            $("#" + element_id).val(inventory_item.new_quantity);
+          }, "pathways quantity changed");
+
+          inventory.publish_events_to("view", function(inventory_item){
+            var element_id = "crossroads_qty_" + inventory_item.item_id;
+            $("#" + element_id).val(inventory_item.new_quantity);
+          }, "crossroads quantity changed");
+
+          inventory.publish_events_to("view", function(inventory_item){
+            var added_inventory_item_view = new EJS({url: "templates/inventory_item.ejs"}).render(inventory_item);
+            $("#inventory_items").prepend(added_inventory_item_view);
+            $("#crossroads_qty_" + inventory_item.item_id).change(function(){
+              inventory.quantity_changed_for_crossroads(inventory_item.item_id, $(this).val());
+            });
+            $("#pathways_qty_" + inventory_item.item_id).change(function(){
+              inventory.quantity_changed_for_pathways(inventory_item.item_id, $(this).val());
+            });
+          }, "inventory item added");
+
           $("#return_home").click(function(){
             self.show_home();
           });
+
+          event_store.hydrate();
         };
-        
+
         self.show_home = function(){
           new EJS({url: "templates/home.ejs"}).update("application", {});
-          
+
           $("#add_inventory_items_button").click(function(){
             self.show_inventory_items();
           });
-          
+
           $("#take_inventory_button").click(function(){
             self.show_take_inventory_form();
           });
         };
-        
+
         self.start_up = function(){
           self.show_home();
         };
       };
-    
+
       $(document).ready(function(){
         new HeeHawApplication().start_up();
       });
