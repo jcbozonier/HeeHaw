@@ -3,101 +3,34 @@
     <title>Hee Haw</title>
     <script src="lib/jquery-1.7.1.min.js"></script>
     <script src="lib/ejs_production.js"></script>
+    <script src="scripts/EventStore.js"></script>
+    <script src="scripts/Inventory.js"></script>
     <script type="text/javascript">
-      function generate_guid() {
-        var S4 = function() {
-           return (((1+Math.random())*0x10000)|0).toString(16).substring(1);
-        };
-        var separator = "_";
-        return (S4()+S4()+separator+S4()+separator+S4()+separator+S4()+separator+S4()+S4()+S4());
-      }
-
-      var EventStore = function(){
-        var self = this;
-        var events = [];
-        var ignore_events = true;
-
-        self.on_hydration = function(event){};
-
-        self.store = function(event){
-          if(!ignore_events){
-            events.push(event);
-          }
-        };
-
-        self.hydrate = function(){
-          ignore_events = true;
-          events.map(function(event){
-            self.on_hydration(event);
-          });
-          ignore_events = false;
-        };
-      };
-
-      var Inventory = function(){
-        var self = this;
-        var event_subscribers = [];
-        self.event_store = null;
-
-        self.publish_events_to = function(subscriber_name, callback, event_name){
-          event_subscribers.push({name:subscriber_name, callback:callback, event_name:event_name});
-        };
-
-        self.remove_all_subscribers = function(){
-          event_subscribers = [];
-        };
-
-        self.hydrate = function(event){
-          event_subscribers.map(function(subscriber){
-            if(event.type === subscriber.event_name){
-              subscriber.callback(event);
-            }
-          });
-        };
-
-        self.quantity_changed_for_crossroads = function(item_id, new_quantity){
-          notify({
-            type: "crossroads quantity changed",
-            item_id: item_id,
-            new_quantity: new_quantity
-          });
-        };
-
-        self.quantity_changed_for_pathways = function(item_id, new_quantity){
-          notify({
-            type: "pathways quantity changed",
-            item_id: item_id,
-            new_quantity: new_quantity
-          });
-        };
-
-        self.add_inventory_item = function(item_name){
-          notify({
-            type: "inventory item added",
-            item_id: generate_guid(),
-            item_name: item_name
-          });
-        };
-
-        var notify = function(event){
-          if(self.event_store == null){
-            console.log("event store hasn't been set yet!");
-          }
-          self.event_store.store(event);
-          event_subscribers.map(function(subscriber){
-            if(event.type === subscriber.event_name){
-              subscriber.callback(event);
-            }
-          });
-        };
-      };
-
       var HeeHawApplication = function(){
         var self = this;
         var inventory = new Inventory();
         var event_store = new EventStore();
         event_store.on_hydration = inventory.hydrate;
         inventory.event_store = event_store;
+
+        self.show_inventory_report = function(){
+          new EJS({url: "templates/inventory_report.ejs"}).update("application", {});
+
+          $("#return_home").click(function(){
+            self.show_home();
+          });
+
+          inventory.run_report(function(inventory_line_item){
+            var line_item = {
+              item_name: inventory_line_item.name,
+              crossroads_quantity: inventory_line_item.crossroads_quantity,
+              pathways_quantity: inventory_line_item.pathways_quantity
+            };
+
+            var line_item_html = new EJS({url: "templates/inventory_line_item.ejs"}).render(line_item);
+            $("#report tbody").append(line_item_html);
+          });
+        };
 
         self.show_inventory_items = function(){
           inventory.remove_all_subscribers();
@@ -165,6 +98,10 @@
 
           $("#take_inventory_button").click(function(){
             self.show_take_inventory_form();
+          });
+
+          $("#show_report_button").click(function(){
+            self.show_inventory_report();
           });
         };
 
